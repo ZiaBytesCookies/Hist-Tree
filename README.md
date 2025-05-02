@@ -3,15 +3,11 @@
 This project provides an interactive, visual demonstration of the Hist-Tree data structure, a hierarchical histogram-based index for range queries over sorted data. The demo is entirely browser-based and implemented in a single HTML file using vanilla JavaScript, HTML, and CSS.
 
 🚀 **Features**
-**Generate Data:** Create a dataset of random integers following a normal distribution.
-
-**Tree Construction:** Build a Hist-Tree with user-defined bin count and terminal threshold.
-
-**Visualize Structure:** Graphical representation of the tree hierarchy and bin contents.
-
-**Interactive Lookup:** Perform key lookups, with visual step-by-step traversal and binary search inside terminal bins.
-
-**Error Handling:** Handles edge cases like duplicate values or improper configurations.
+-**Generate Data:** Create a dataset of random integers following a normal distribution.
+-**Tree Construction:** Build a Hist-Tree with user-defined bin count and terminal threshold.
+-**Visualize Structure:** Graphical representation of the tree hierarchy and bin contents.
+-**Interactive Lookup:** Perform key lookups, with visual step-by-step traversal and binary search inside terminal bins.
+-**Error Handling:** Handles edge cases like duplicate values or improper configurations.
 
 📁 **File**
 **hist-tree-demo.html:** The complete interactive demonstration.
