@@ -65,4 +65,4 @@ The demo runs entirely in the browser and is implemented using **vanilla HTML, C
 
 ## 📃 License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the MIT License
