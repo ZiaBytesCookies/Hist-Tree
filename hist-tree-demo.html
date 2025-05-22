@@ -18,6 +18,7 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
+            align-items: start;
         }
         h1, h2, h3 {
             color: #2d5ba3;
@@ -25,12 +26,15 @@
         input, button {
             padding: 8px;
             margin: 5px 0;
+            border-radius: 4px;
+        }
+        input {
+            border: 1px solid #ccc;
         }
         button {
             background-color: #4a86e8;
             color: white;
             border: none;
-            border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.2s;
         }
@@ -45,11 +49,16 @@
         }
         #visualization {
             min-height: 400px;
+            max-height: 400vh; /* Changed from 400vh for more practical max */
             border-radius: 8px;
             padding: 20px;
-            overflow: auto;
             background-color: #fff;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        #tree-structure {
+            /* Tree structure will be rendered here */
         }
         #lookup-result {
             margin-top: 15px;
@@ -59,25 +68,43 @@
             background-color: #e8f0ff;
             border-radius: 4px;
         }
-        .node {
+        .node-container {
             display: flex;
-            margin-bottom: 15px;
-            overflow: auto;
+            margin-bottom: 10px;
+            position: relative;
         }
         .bin {
-            padding: 10px;
+            padding: 6px 8px;
             border: 1px solid rgba(0,0,0,0.1);
-            margin-right: 8px;
-            width: 80px;
+            margin-right: 5px;
+            min-width: 110px; /* Adjusted for longer text */
+            min-height: 55px; /* Adjusted for longer text */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             text-align: center;
             position: relative;
             border-radius: 4px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             transition: transform 0.2s, box-shadow 0.2s;
+            font-size: 0.8em; /* Slightly smaller font for more text */
+            flex-shrink: 0;
         }
         .bin:hover {
             transform: translateY(-2px);
             box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+        }
+        .bin-key-range { /* Updated class name */
+            font-weight: bold;
+            display: block;
+            margin-bottom: 2px;
+            word-break: keep-all;
+            white-space: nowrap;
+        }
+        .bin-item-count { /* Updated class name */
+            display: block;
+            font-size: 0.9em;
         }
         .terminal {
             background: linear-gradient(to bottom right, #ffcccb, #ffd8cc);
@@ -91,9 +118,10 @@
             position: absolute;
             border-left: 2px solid #4a86e8;
             width: 2px;
-            height: 20px;
-            bottom: -20px;
+            height: 15px;
+            bottom: -15px;
             left: 50%;
+            transform: translateX(-50%);
         }
         .highlighted {
             background: linear-gradient(to bottom right, #fffacd, #fff5b7);
@@ -109,6 +137,7 @@
             background-color: #f0f7ff;
             border-radius: 6px;
             border-left: 4px solid #4a86e8;
+            font-size: 0.9em;
         }
         #generated-data {
             max-height: 150px;
@@ -118,6 +147,7 @@
             margin-top: 10px;
             background-color: #f8f9fa;
             border-radius: 4px;
+            word-break: break-all;
         }
         #hist-tree-info {
             margin-top: 15px;
@@ -136,22 +166,13 @@
             border-radius: 6px;
             display: none;
         }
-        .level-indicator {
-            position: absolute;
-            left: 5px;
-            margin-top: -25px;
-            background-color: #4a86e8;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 0.8em;
-        }
         .debug-info {
             background-color: #e8f5e9;
             padding: 10px;
             border-radius: 6px;
             margin-bottom: 15px;
             border-left: 4px solid #4caf50;
+            font-size: 0.9em;
         }
         .depth-warning {
             background-color: #fff8e1;
@@ -166,23 +187,24 @@
 </head>
 <body>
     <h1>Hist-Tree Demonstration</h1>
-    <p>This interactive demo shows how the Hist-Tree data structure works. Hist-Tree is a tree-based index structure where each node represents a histogram partitioning the data range into equal-width bins.</p>
-    
+    <p>This interactive demo shows how a Hist-Tree works. A Hist-Tree is an index where each node is a histogram that divides a key range into equal-width bins. This helps quickly narrow down the search area for a key in sorted data.</p>
+    <p><strong>How to use:</strong> 1. Set parameters and click "Generate Random Data". 2. Click "Build Hist-Tree" to create and visualize the tree. 3. Enter a key and click "Lookup" to see the search process.</p>
+
     <div id="error-display"></div>
-    
+
     <div class="container">
         <div class="input-section">
-            <h2>Data Input</h2>
+            <h2>Data Input & Tree Configuration</h2>
             <div>
                 <label for="data-size">Number of data points:</label>
                 <input type="number" id="data-size" value="50" min="10" max="1000">
             </div>
             <div>
-                <label for="data-min">Data range minimum:</label>
+                <label for="data-min">Data range minimum value:</label>
                 <input type="number" id="data-min" value="0">
             </div>
             <div>
-                <label for="data-max">Data range maximum:</label>
+                <label for="data-max">Data range maximum value:</label>
                 <input type="number" id="data-max" value="1000">
             </div>
             <div>
@@ -190,31 +212,35 @@
                 <input type="number" id="bins-count" value="4" min="2" max="8">
             </div>
             <div>
-                <label for="bin-threshold">Terminal bin threshold:</label>
+                <label for="bin-threshold">Terminal Bin Threshold (max items in a leaf/terminal bin before splitting):</label>
                 <input type="number" id="bin-threshold" value="8" min="1" max="100">
             </div>
             <button id="generate-data">Generate Random Data</button>
             <button id="build-tree">Build Hist-Tree</button>
-            
-            <h3>Generated Data</h3>
-            <div id="generated-data"></div>
-            
-            <h3>Hist-Tree Info</h3>
-            <div id="hist-tree-info"></div>
-            
-            <h3>Lookup</h3>
+
+            <h3>Generated Sorted Data</h3>
+            <div id="generated-data">View the sorted data used to build the tree.</div>
+
+            <h3>Hist-Tree Information</h3>
+            <div id="hist-tree-info">Details about the constructed tree will appear here.</div>
+
+            <h3>Lookup Key</h3>
             <div>
                 <label for="lookup-key">Key to look up:</label>
-                <input type="number" id="lookup-key">
+                <input type="number" id="lookup-key" placeholder="e.g., 500">
                 <button id="do-lookup">Lookup</button>
             </div>
-            <div id="lookup-result"></div>
+            <div id="lookup-result">Lookup result will be shown here.</div>
         </div>
-        
+
         <div id="visualization">
             <h2>Hist-Tree Visualization</h2>
-            <div id="tree-structure"></div>
-            <div id="lookup-steps"></div>
+            <div id="tree-structure">
+                <!-- Tree will be rendered here -->
+            </div>
+            <div id="lookup-steps">
+                <!-- Lookup steps will be rendered here -->
+            </div>
         </div>
     </div>
 
@@ -223,518 +249,410 @@
         window.onerror = function(message, source, lineno, colno, error) {
             const errorDisplay = document.getElementById('error-display');
             errorDisplay.style.display = 'block';
-            errorDisplay.innerHTML = `<p>Error: ${message}</p><p>Line: ${lineno}, Column: ${colno}</p>`;
-            console.error("Global error:", error);
+            errorDisplay.innerHTML = `<p>An unexpected error occurred: ${message}</p><p>Details: Line ${lineno}, Column ${colno}. Check console for more info.</p>`;
+            console.error("Global error:", {message, source, lineno, colno, error});
             return true;
         };
-        
+
         // Hist-Tree implementation
         class HistTree {
             constructor(data, binsPerNode, terminalThreshold) {
                 this.data = [...data].sort((a, b) => a - b);
                 this.binsPerNode = binsPerNode;
                 this.terminalThreshold = terminalThreshold;
-                this.min = this.data[0];
-                this.max = this.data[this.data.length - 1];
-                
-                // Handle case where all values are the same
-                if (this.min === this.max) {
-                    this.min = this.min - 1;  // Create a small artificial range
-                    this.max = this.max + 1;
+                this.globalMinKey = this.data.length > 0 ? this.data[0] : 0;
+                this.globalMaxKey = this.data.length > 0 ? this.data[this.data.length - 1] : 1;
+
+                if (this.data.length > 0 && this.globalMinKey === this.globalMaxKey) { // Handle all data points being the same
+                    this.globalMinKey = this.globalMinKey - 1;
+                    this.globalMaxKey = this.globalMaxKey + 1;
+                } else if (this.data.length === 0) {
+                    this.globalMinKey = 0;
+                    this.globalMaxKey = 1; // Default range for empty tree to avoid division by zero
                 }
-                
-                // Find the next power of 2 range
-                this.range = this.max - this.min + 1;
-                this.powerOfTwoRange = 1;
-                while (this.powerOfTwoRange < this.range) {
-                    this.powerOfTwoRange *= 2;
+
+                // Ensure root conceptual range is a power of 2, covering the actual data range
+                this.rootConceptualRangeWidth = 1;
+                const actualKeySpan = this.globalMaxKey - this.globalMinKey + 1;
+                while (this.rootConceptualRangeWidth < actualKeySpan) {
+                    this.rootConceptualRangeWidth *= 2;
                 }
-                
-                // Set maximum tree depth to prevent stack overflow
-                this.maxDepth = Math.min(10, Math.floor(Math.log2(this.data.length) / Math.log2(this.binsPerNode)) + 2);
-                
-                console.log("HistTree constructor:", {
-                    min: this.min,
-                    max: this.max,
-                    range: this.range,
-                    powerOfTwoRange: this.powerOfTwoRange,
-                    maxDepth: this.maxDepth
-                });
-                
-                // Build the tree
-                this.root = this.buildNode(0, this.data.length - 1, this.powerOfTwoRange, 0);
+                this.rootEffectiveMinKey = this.globalMinKey;
+
+                // Heuristic for max depth to prevent overly deep trees in visualization
+                this.maxAllowedDepth = Math.min(10, Math.floor(Math.log2(this.data.length || 1) / Math.log2(this.binsPerNode)) + 3);
+
+                if (this.data.length > 0) {
+                    this.root = this.buildNodeRecursive(0, this.data.length - 1, this.rootEffectiveMinKey, this.rootConceptualRangeWidth, 0);
+                } else {
+                    this.root = { // Representation of an empty tree's root
+                        isLeaf: true, histogram: [0], children: null, dataStartIndex: 0, dataEndIndex: -1,
+                        effectiveMinKey: 0, conceptualRangeWidth: 1, binWidth: 1, depth: 0, isEmptyNode: true
+                    };
+                }
             }
-            
-            buildNode(start, end, range, depth) {
-                // Safety check for recursion - early return if params are invalid
-                if (start > end || start < 0 || end >= this.data.length || range <= 0) {
-                    console.warn("Invalid buildNode parameters:", {start, end, range, depth});
-                    return {
-                        isLeaf: true,
-                        histogram: [1], // Dummy count
-                        children: null,
-                        start: Math.max(0, start),
-                        end: Math.min(this.data.length - 1, end),
-                        range: range,
-                        depth: depth,
-                        isError: true
+
+            buildNodeRecursive(dataStartIndex, dataEndIndex, nodeEffectiveMinKey, nodeConceptualRangeWidth, depth) {
+                const numElementsInNodeRange = dataEndIndex - dataStartIndex + 1;
+
+                if (numElementsInNodeRange <= 0) { // Should not happen if called correctly, but good guard
+                     return {
+                        isLeaf: true, histogram: [0], children: null, dataStartIndex, dataEndIndex,
+                        effectiveMinKey: nodeEffectiveMinKey, conceptualRangeWidth: nodeConceptualRangeWidth,
+                        binWidth: nodeConceptualRangeWidth, depth: depth, isEmptyNode: true
                     };
                 }
-                
-                // Early return if we've reached max depth or if range is too small
-                if (depth >= this.maxDepth || end - start + 1 <= this.terminalThreshold || range < this.binsPerNode) {
+
+                // Conditions for this node to be a leaf
+                if (depth >= this.maxAllowedDepth || numElementsInNodeRange <= this.terminalThreshold || nodeConceptualRangeWidth < this.binsPerNode) {
                     return {
-                        isLeaf: true,
-                        histogram: [end - start + 1],
-                        children: null,
-                        start: start,
-                        end: end,
-                        range: range,
+                        isLeaf: true, histogram: [numElementsInNodeRange], children: null, dataStartIndex, dataEndIndex,
+                        effectiveMinKey: nodeEffectiveMinKey, conceptualRangeWidth: nodeConceptualRangeWidth,
+                        binWidth: nodeConceptualRangeWidth, // For a leaf, its "bin" covers its whole range
                         depth: depth
                     };
                 }
-                
-                const binWidth = range / this.binsPerNode;
-                
-                // Additional check for very small bin width
-                if (binWidth < 0.0001) {
-                    return {
-                        isLeaf: true,
-                        histogram: [end - start + 1],
-                        children: null,
-                        start: start,
-                        end: end,
-                        range: range,
-                        depth: depth
-                    };
-                }
-                
+
+                const currentBinWidth = Math.max(1e-9, nodeConceptualRangeWidth / this.binsPerNode); // Avoid division by zero for tiny ranges
                 const histogram = Array(this.binsPerNode).fill(0);
-                const binBoundaries = Array(this.binsPerNode + 1);
-                
-                // Calculate bin boundaries - these are relative to min value
-                for (let i = 0; i <= this.binsPerNode; i++) {
-                    binBoundaries[i] = i * binWidth;
-                }
-                
-                // Count keys in each bin
-                for (let i = start; i <= end; i++) {
-                    const binIndex = Math.min(
-                        Math.floor((this.data[i] - this.min) / binWidth),
-                        this.binsPerNode - 1
-                    );
+
+                // Populate histogram for the current node using its assigned data segment
+                for (let k = dataStartIndex; k <= dataEndIndex; k++) {
+                    const keyRelativeToNodeStart = this.data[k] - nodeEffectiveMinKey;
+                    let binIndex = Math.floor(keyRelativeToNodeStart / currentBinWidth);
+                    binIndex = Math.max(0, Math.min(binIndex, this.binsPerNode - 1)); // Clamp to valid bin range
                     histogram[binIndex]++;
                 }
-                
-                // Create children for non-terminal bins
+
                 const children = Array(this.binsPerNode).fill(null);
-                let currentStart = start;
-                
+                let currentDataPointer = dataStartIndex; // Pointer to slice the sorted data for children
+
                 for (let i = 0; i < this.binsPerNode; i++) {
-                    if (histogram[i] > this.terminalThreshold && histogram[i] < end - start && depth < this.maxDepth - 1) {
-                        const binEnd = currentStart + histogram[i] - 1;
-                        
-                        // Make sure we're making progress in the recursion
-                        if (binEnd > currentStart && binEnd - currentStart + 1 < end - start + 1) {
-                            children[i] = this.buildNode(
-                                currentStart,
-                                binEnd,
-                                binWidth,
-                                depth + 1
+                    const countInThisBin = histogram[i];
+                    // Conditions to create a child for this bin:
+                    if (countInThisBin > 0 && countInThisBin > this.terminalThreshold && depth < this.maxAllowedDepth - 1) {
+                        const childDataStartIndex = currentDataPointer;
+                        const childDataEndIndex = currentDataPointer + countInThisBin - 1;
+                        const childEffectiveMinKey = nodeEffectiveMinKey + i * currentBinWidth;
+                        const childConceptualRangeWidth = currentBinWidth;
+
+                        if (childDataEndIndex >= childDataStartIndex) { // Ensure valid data segment for child
+                            children[i] = this.buildNodeRecursive(
+                                childDataStartIndex, childDataEndIndex, childEffectiveMinKey,
+                                childConceptualRangeWidth, depth + 1
                             );
                         }
                     }
-                    currentStart += histogram[i];
+                    currentDataPointer += countInThisBin; // Advance data pointer for the next bin's potential child
                 }
-                
                 return {
-                    isLeaf: false,
-                    histogram: histogram,
-                    children: children,
-                    start: start,
-                    end: end,
-                    range: range,
-                    binWidth: binWidth,
-                    binBoundaries: binBoundaries,
-                    depth: depth
+                    isLeaf: false, histogram: histogram, children: children, dataStartIndex, dataEndIndex,
+                    effectiveMinKey: nodeEffectiveMinKey, conceptualRangeWidth: nodeConceptualRangeWidth,
+                    binWidth: currentBinWidth, depth: depth
                 };
             }
-            
-            lookup(key) {
-                if (key < this.min) return 0;
-                if (key > this.max) return this.data.length;
-                
+
+            lookup(lookupKey) {
+                if (this.data.length === 0) return { position: 0, steps: [{isFinalStep:true, finalPos:0, terminalBinSize:0, searchRangeStart:0, searchRangeEnd:-1, message: "Lookup on empty tree."}]};
+                if (lookupKey < this.globalMinKey) return { position: 0, steps: [{isFinalStep:true, finalPos:0, terminalBinSize:0, searchRangeStart:0, searchRangeEnd:-1, message: `Key ${lookupKey} is less than the minimum key ${this.globalMinKey}. Position is 0.`}] };
+                if (lookupKey > this.globalMaxKey) return { position: this.data.length, steps: [{isFinalStep:true, finalPos:this.data.length, terminalBinSize:0, searchRangeStart:this.data.length, searchRangeEnd:this.data.length-1, message: `Key ${lookupKey} is greater than the maximum key ${this.globalMaxKey}. Position is ${this.data.length}.`}] };
+
                 const steps = [];
-                let node = this.root;
-                let adjustedKey = key - this.min;
-                let pos = 0;
-                let currentRange = this.powerOfTwoRange;
-                
-                while (true) {
-                    // Calculate bin
-                    const binWidth = currentRange / this.binsPerNode;
-                    const bin = Math.min(
-                        Math.floor(adjustedKey / binWidth),
-                        this.binsPerNode - 1
-                    );
-                    
-                    // Record step
+                let currentNode = this.root;
+                let keyAdjustedForNode = lookupKey - this.rootEffectiveMinKey; // Key relative to the current node's start
+                let currentPositionEstimate = 0; // Cumulative count of items in bins to the left
+
+                while (currentNode && !currentNode.isLeaf && !currentNode.isEmptyNode) {
+                    const nodeBinWidth = currentNode.binWidth;
+                    let calculatedBinIndex = Math.floor(keyAdjustedForNode / nodeBinWidth);
+                    calculatedBinIndex = Math.max(0, Math.min(calculatedBinIndex, this.binsPerNode - 1));
+
                     steps.push({
-                        node: node,
-                        bin: bin,
-                        pos: pos
+                        nodeId: `node-depth-${currentNode.depth}-effMin-${Math.round(currentNode.effectiveMinKey)}`,
+                        nodeSnapshot: { // Store a snapshot of the node state for visualization
+                            effectiveMinKey: currentNode.effectiveMinKey, conceptualRangeWidth: currentNode.conceptualRangeWidth,
+                            binWidth: currentNode.binWidth, histogram: [...currentNode.histogram], depth: currentNode.depth
+                        },
+                        calculatedBinIndex: calculatedBinIndex,
+                        positionEstimateBeforeThisNode: currentPositionEstimate,
+                        lookupKeyForContext: lookupKey, // Original lookup key for context
+                        keyAdjustedForThisNode: keyAdjustedForNode + currentNode.effectiveMinKey // Display adjusted key in global context
                     });
-                    
-                    // Add counts of all smaller bins
-                    for (let i = 0; i < bin; i++) {
-                        pos += node.histogram[i];
+
+                    // Add counts from bins to the left of the chosen bin to the position estimate
+                    for (let i = 0; i < calculatedBinIndex; i++) {
+                        currentPositionEstimate += currentNode.histogram[i];
                     }
-                    
-                    // Check if we reached a terminal bin
-                    if (!node.children || !node.children[bin]) {
-                        // Final search within the bin
-                        const exactPos = this.binarySearch(
-                            this.data, 
-                            key, 
-                            pos, 
-                            pos + node.histogram[bin] - 1
-                        );
-                        
-                        steps.push({
-                            finalPos: exactPos,
-                            terminalBinSize: node.histogram[bin]
-                        });
-                        
-                        return {
-                            position: exactPos,
-                            steps: steps
-                        };
+
+                    if (!currentNode.children || !currentNode.children[calculatedBinIndex]) { // No further child, search ends here
+                        break;
                     }
-                    
-                    // Move to child node
-                    node = node.children[bin];
-                    adjustedKey -= bin * binWidth;
-                    currentRange = binWidth;
+                    currentNode = currentNode.children[calculatedBinIndex];
+                    keyAdjustedForNode -= calculatedBinIndex * nodeBinWidth; // Adjust key for the child node's perspective
                 }
+
+                // Determine the final search range within the data array
+                const lastProcessedNodeForRange = currentNode.isLeaf || currentNode.isEmptyNode ? currentNode : (steps.length > 0 ? steps[steps.length - 1].nodeSnapshot : this.root);
+                const binIndexInLastNode = currentNode.isLeaf || currentNode.isEmptyNode ? 0 : (steps.length > 0 ? steps[steps.length - 1].calculatedBinIndex : 0);
+                
+                const countInFinalBin = lastProcessedNodeForRange.histogram ? lastProcessedNodeForRange.histogram[binIndexInLastNode] || 0 : 0;
+
+                const finalSearchStartIndex = currentPositionEstimate;
+                const finalSearchEndIndex = currentPositionEstimate + countInFinalBin - 1;
+
+                // Perform binary search in the narrowed-down data segment
+                const exactPosition = this.binarySearchInDataSegment(
+                    this.data, lookupKey, 
+                    Math.max(0, finalSearchStartIndex),
+                    Math.min(this.data.length - 1, finalSearchEndIndex)
+                );
+
+                steps.push({
+                    isFinalStep: true, finalPos: exactPosition, terminalBinSize: countInFinalBin,
+                    searchRangeStart: finalSearchStartIndex, searchRangeEnd: finalSearchEndIndex
+                });
+                return { position: exactPosition, steps: steps };
             }
-            
-            binarySearch(arr, key, low, high) {
-                while (low <= high) {
-                    const mid = Math.floor((low + high) / 2);
-                    if (arr[mid] < key) {
-                        low = mid + 1;
-                    } else if (arr[mid] > key) {
-                        high = mid - 1;
+
+            binarySearchInDataSegment(arr, key, low, high) {
+                // Ensure low and high are valid indices within the array segment
+                low = Math.max(0, Math.min(low, arr.length -1));
+                high = Math.max(low, Math.min(high, arr.length -1)); // Ensure high >= low after clamping
+
+                if (arr.length === 0 || low > high) return low; // If range is invalid or array empty
+
+                let l = low, r = high, ans = r + 1; // ans initialized to one past the segment end
+                while (l <= r) {
+                    const mid = Math.floor((l + r) / 2);
+                    if (arr[mid] >= key) {
+                        ans = mid; r = mid - 1; // Found potential spot, try earlier
                     } else {
-                        // Found exact match
-                        return mid;
+                        l = mid + 1; // Too small, try later
                     }
                 }
-                // Return lower bound position
-                return low;
+                return ans; // Returns the index of the first element >= key, or high + 1
             }
         }
-        
-        // UI functions
+
         document.getElementById('generate-data').addEventListener('click', generateData);
         document.getElementById('build-tree').addEventListener('click', buildHistTree);
         document.getElementById('do-lookup').addEventListener('click', performLookup);
-        
+
         let data = [];
         let histTree = null;
-        
+        let nodeElementsRegistry = {}; // To store references to DOM elements for nodes
+
         function generateData() {
             const size = parseInt(document.getElementById('data-size').value);
             const min = parseInt(document.getElementById('data-min').value);
             const max = parseInt(document.getElementById('data-max').value);
-            
             data = [];
-            for (let i = 0; i < size; i++) {
-                // Using normal distribution around the middle of the range
-                const mean = (min + max) / 2;
-                const stdDev = (max - min) / 6; // 99.7% of values within range
-                let value;
-                do {
-                    // Box-Muller transform for normal distribution
-                    const u1 = Math.random();
-                    const u2 = Math.random();
-                    const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-                    value = Math.round(mean + z * stdDev);
-                } while (value < min || value > max);
-                
-                data.push(value);
+            if (size > 0 && min <= max) {
+                for (let i = 0; i < size; i++) {
+                    // Using a more uniform distribution for simplicity in demo,
+                    // as normal distribution sometimes clusters too much for small N.
+                    data.push(Math.floor(Math.random() * (max - min + 1)) + min);
+                }
+                data.sort((a, b) => a - b);
+            } else if (min > max) {
+                document.getElementById('error-display').style.display = 'block';
+                document.getElementById('error-display').innerHTML = '<p>Data minimum cannot be greater than maximum.</p>';
             }
-            
-            // Sort data
-            data.sort((a, b) => a - b);
-            
-            // Display generated data
             const dataDisplay = document.getElementById('generated-data');
             dataDisplay.innerHTML = '';
-            
-            if (data.length <= 100) {
-                dataDisplay.innerText = data.join(', ');
-            } else {
+            if (data.length === 0) dataDisplay.innerText = "No data generated (or parameters are invalid).";
+            else if (data.length <= 100) dataDisplay.innerText = data.join(', ');
+            else {
                 const firstTen = data.slice(0, 10).join(', ');
                 const lastTen = data.slice(data.length - 10).join(', ');
-                dataDisplay.innerText = `${firstTen}, ... (${data.length - 20} more values) ..., ${lastTen}`;
+                dataDisplay.innerText = `First 10: ${firstTen}, ... (${data.length - 20} more values) ..., Last 10: ${lastTen}`;
             }
-            
-            // Clear previous tree
+            // Clear previous tree and results
             document.getElementById('tree-structure').innerHTML = '';
             document.getElementById('lookup-steps').innerHTML = '';
             document.getElementById('lookup-result').innerHTML = '';
             document.getElementById('hist-tree-info').innerHTML = '';
-            
-            histTree = null;
+            document.getElementById('error-display').style.display = 'none';
+            histTree = null; nodeElementsRegistry = {};
         }
-        
+
         function buildHistTree() {
-            if (data.length === 0) {
-                alert('Please generate data first!');
-                return;
+            if (data.length === 0 && parseInt(document.getElementById('data-size').value) > 0) {
+                alert('Please generate data first, or set data points to 0 if you intend to build an empty tree.'); return;
             }
-            
-            // Clear any previous error
             const errorDisplay = document.getElementById('error-display');
-            errorDisplay.style.display = 'none';
-            
+            errorDisplay.style.display = 'none'; errorDisplay.innerHTML = '';
+
             const binsPerNode = parseInt(document.getElementById('bins-count').value);
             const terminalThreshold = parseInt(document.getElementById('bin-threshold').value);
-            
-            // Validate inputs
-            if (binsPerNode < 2 || binsPerNode > 8) {
-                errorDisplay.style.display = 'block';
-                errorDisplay.innerHTML = `<p>Number of bins per node must be between 2 and 8.</p>`;
-                return;
-            }
-            
-            if (terminalThreshold < 1) {
-                errorDisplay.style.display = 'block';
-                errorDisplay.innerHTML = `<p>Terminal bin threshold must be at least 1.</p>`;
-                return;
-            }
-            
-            // Check for extreme terminal threshold
-            if (terminalThreshold > data.length / 2) {
-                errorDisplay.style.display = 'block';
-                errorDisplay.innerHTML = `<p>Warning: Terminal bin threshold (${terminalThreshold}) is very large compared to data size (${data.length}).</p>
-                <p>This may result in a shallow tree with few bins.</p>`;
-            }
-            
-            // Check if all data points are the same
-            const allSame = data.every(val => val === data[0]);
-            if (allSame) {
-                errorDisplay.style.display = 'block';
-                errorDisplay.innerHTML = `<p>Warning: All data points have the same value (${data[0]}). Using an artificial range.</p>`;
-            }
-            
-            console.log("Building Hist-Tree with:", {
-                dataLength: data.length,
-                minValue: Math.min(...data),
-                maxValue: Math.max(...data),
-                binsPerNode,
-                terminalThreshold
-            });
-            
+
+            if (binsPerNode < 2 || binsPerNode > 8) { errorDisplay.innerHTML += `<p>Bins per node must be between 2 and 8.</p>`; }
+            if (terminalThreshold < 1) { errorDisplay.innerHTML += `<p>Terminal bin threshold must be at least 1.</p>`; }
+            if (data.length > 0 && terminalThreshold > data.length) { errorDisplay.innerHTML += `<p>Warning: Terminal threshold (${terminalThreshold}) is larger than total data points (${data.length}). The root will likely be a leaf.</p>`;}
+            if (data.length > 0 && data.every(val => val === data[0])) { errorDisplay.innerHTML += `<p>Notice: All data values are identical. The tree structure might be simple.</p>`; }
+
+            if (errorDisplay.innerHTML !== '') { errorDisplay.style.display = 'block'; return; }
+
             try {
-                // Build the Hist-Tree
                 histTree = new HistTree(data, binsPerNode, terminalThreshold);
-                console.log("Hist-Tree built successfully:", histTree);
-                
-                // Display tree info
                 const infoDisplay = document.getElementById('hist-tree-info');
                 infoDisplay.innerHTML = `
-                    <p>Data range: ${histTree.min} - ${histTree.max}</p>
-                    <p>Power of two range: ${histTree.powerOfTwoRange}</p>
-                    <p>Maximum tree depth: ${histTree.maxDepth}</p>
-                `;
-                
-                // Visualize the tree
-                visualizeTree();
+                    <p><strong>Data Range:</strong> ${data.length > 0 ? histTree.globalMinKey + ' to ' + histTree.globalMaxKey : 'N/A (No data)'}</p>
+                    <p><strong>Root Node Effective Key Range:</strong> ${histTree.rootEffectiveMinKey} to ${histTree.rootEffectiveMinKey + histTree.rootConceptualRangeWidth -1}</p>
+                    <p><strong>Root Node Conceptual Range Width:</strong> ${histTree.rootConceptualRangeWidth} (Power of 2)</p>
+                    <p><strong>Maximum Tree Depth Allowed:</strong> ${histTree.maxAllowedDepth} (to prevent excessive recursion)</p>`;
+                visualizeTreeStructure();
             } catch (error) {
-                console.error("Error building Hist-Tree:", error);
-                errorDisplay.style.display = 'block';
-                errorDisplay.innerHTML = `<p>Error building Hist-Tree: ${error.message}</p>
-                    <p>Try reducing the number of data points or increasing the terminal bin threshold.</p>`;
+                console.error("Error building Hist-Tree:", error, error.stack);
+                errorDisplay.style.display = 'block'; errorDisplay.innerHTML += `<p>Build Error: ${error.message}. Check console.</p>`;
             }
         }
-        
-        function visualizeTree() {
+
+        function visualizeTreeStructure() {
             const container = document.getElementById('tree-structure');
-            container.innerHTML = '';
-            
-            // Track max depth reached
-            let maxDepthReached = 0;
-            
-            // Function to recursively render nodes
-            function renderNode(node, level, parentBin) {
+            container.innerHTML = ''; nodeElementsRegistry = {}; let maxDepthReached = 0;
+
+            function renderNodeRecursive(node, level) {
+                if (!node) return;
                 maxDepthReached = Math.max(maxDepthReached, level);
-                
-                const nodeDiv = document.createElement('div');
-                nodeDiv.className = 'node';
-                nodeDiv.style.marginLeft = level * 50 + 'px';
-                
-                // Add a label for the level
-                const levelLabel = document.createElement('div');
-                levelLabel.className = 'level-indicator';
-                levelLabel.textContent = `Level ${level}`;
-                
-                if (level === 0) {
-                    container.appendChild(levelLabel);
-                }
-                
-                // Create bins
-                if (node.isLeaf) {
-                    // Leaf node with a single bin
-                    const bin = document.createElement('div');
-                    bin.className = 'bin terminal';
-                    bin.textContent = `Count: ${node.histogram[0]}`;
-                    
-                    // Show actual data indices for leaf nodes
-                    const dataStart = node.start >= 0 ? data[node.start] : 'N/A';
-                    const dataEnd = node.end < data.length ? data[node.end] : 'N/A';
-                    bin.setAttribute('data-range', `[${dataStart}, ${dataEnd}]`);
-                    bin.setAttribute('title', `Range: [${dataStart}, ${dataEnd}], Depth: ${node.depth}`);
-                    
-                    nodeDiv.appendChild(bin);
-                } else {
-                    // Inner node with multiple bins
+                const nodeContainer = document.createElement('div');
+                nodeContainer.className = 'node-container';
+                nodeContainer.style.marginLeft = level * 20 + 'px'; // Indentation per level
+                // Unique ID for each node DOM element for later highlighting
+                nodeContainer.id = `node-depth-${node.depth}-effMin-${Math.round(node.effectiveMinKey)}`;
+                nodeElementsRegistry[nodeContainer.id] = nodeContainer;
+
+
+                if (node.isEmptyNode) {
+                    const binDiv = document.createElement('div'); binDiv.className = 'bin terminal';
+                    binDiv.innerHTML = `<span class="bin-key-range">[Empty Tree Root]</span>`;
+                    nodeContainer.appendChild(binDiv);
+                } else if (node.isLeaf) {
+                    const binDiv = document.createElement('div'); binDiv.className = 'bin terminal';
+                    const effStart = Math.round(node.effectiveMinKey);
+                    const effEnd = Math.round(node.effectiveMinKey + node.conceptualRangeWidth - 1);
+                    binDiv.innerHTML = `<span class="bin-key-range">Keys: [${effStart} to ${effEnd}]</span><span class="bin-item-count">Count: ${node.histogram[0]}</span><small>(Leaf Node, Depth ${node.depth})</small>`;
+                    nodeContainer.appendChild(binDiv);
+                } else { // Internal node
                     for (let i = 0; i < node.histogram.length; i++) {
-                        const bin = document.createElement('div');
+                        const binDiv = document.createElement('div');
                         const hasChild = node.children && node.children[i];
-                        
-                        bin.className = `bin ${hasChild ? 'non-terminal' : 'terminal'}`;
-                        bin.textContent = `Count: ${node.histogram[i]}`;
-                        
-                        // Show bin value range 
-                        if (node.binWidth) {
-                            const binStart = histTree.min + i * node.binWidth;
-                            const binEnd = histTree.min + (i + 1) * node.binWidth - 1;
-                            bin.setAttribute('title', `Range: [${Math.round(binStart)}, ${Math.round(binEnd)}], Depth: ${node.depth}`);
-                            bin.setAttribute('data-range', `[${Math.round(binStart)}, ${Math.round(binEnd)}]`);
-                        } else {
-                            bin.setAttribute('data-range', `Bin ${i}`);
-                        }
-                        
+                        binDiv.className = `bin ${hasChild ? 'non-terminal' : 'terminal'}`;
+                        const binStartKey = Math.round(node.effectiveMinKey + i * node.binWidth);
+                        const binEndKey = Math.round(node.effectiveMinKey + (i + 1) * node.binWidth - 1);
+                        binDiv.innerHTML = `<span class="bin-key-range">Keys: [${binStartKey} to ${binEndKey}]</span><span class="bin-item-count">Count: ${node.histogram[i]}</span>`;
                         if (hasChild) {
-                            const connector = document.createElement('div');
-                            connector.className = 'connector';
-                            bin.appendChild(connector);
+                            const connector = document.createElement('div'); connector.className = 'connector';
+                            binDiv.appendChild(connector);
+                        } else {
+                             binDiv.innerHTML += `<small>(Terminal Bin)</small>`;
                         }
-                        
-                        nodeDiv.appendChild(bin);
+                        nodeContainer.appendChild(binDiv);
                     }
                 }
-                
-                container.appendChild(nodeDiv);
-                
-                // Render children recursively
+                container.appendChild(nodeContainer);
+
+                // Recursively render children
                 if (!node.isLeaf && node.children) {
                     for (let i = 0; i < node.children.length; i++) {
-                        if (node.children[i]) {
-                            renderNode(node.children[i], level + 1, i);
+                        if (node.children[i]) renderNodeRecursive(node.children[i], level + 1);
+                    }
+                }
+            }
+
+            if (histTree && histTree.root) {
+                const debugInfo = document.createElement('div'); debugInfo.className = 'debug-info';
+                debugInfo.innerHTML = `<p><b>Root Node (Depth ${histTree.root.depth})</b> - Effective Min Key: ${Math.round(histTree.root.effectiveMinKey)}, Conceptual Range Width: ${Math.round(histTree.root.conceptualRangeWidth)}</p>`;
+                if (histTree.root.histogram && histTree.root.histogram.length > 0 && !histTree.root.isEmptyNode) {
+                     debugInfo.innerHTML += `<p>Root Bins: ${histTree.root.histogram.length}, Counts: [${histTree.root.histogram.join(', ')}]</p>`;
+                } else if (histTree.root.isEmptyNode) {
+                     debugInfo.innerHTML += `<p>Root node represents an empty tree.</p>`;
+                } else if (histTree.root.isLeaf) {
+                     debugInfo.innerHTML += `<p>Root is a Leaf Node. Item Count: ${histTree.root.histogram[0]}</p>`;
+                }
+                container.appendChild(debugInfo);
+                renderNodeRecursive(histTree.root, 0);
+
+                if (maxDepthReached >= histTree.maxAllowedDepth && data.length > 0 && !histTree.root.isLeaf && !histTree.root.isEmptyNode) {
+                    const depthWarn = document.createElement('div'); depthWarn.className = 'depth-warning';
+                    depthWarn.innerHTML = `<p>Maximum display depth (${histTree.maxAllowedDepth}) reached during visualization. Deeper parts of the tree are not shown but exist.</p>`;
+                    container.insertBefore(depthWarn, container.firstChild); // Prepend warning
+                }
+            } else container.innerHTML = "<p>No tree data available to visualize. Please build the tree first.</p>";
+        }
+
+        function performLookup() {
+            if (!histTree || !histTree.root) { alert('Please build the Hist-Tree first!'); return; }
+             const keyInput = document.getElementById('lookup-key').value;
+            if(keyInput === "") { alert("Please enter a key to look up."); return; }
+            const keyToLookup = parseInt(keyInput);
+
+            const result = histTree.lookup(keyToLookup);
+            const resultDisplay = document.getElementById('lookup-result');
+
+            if (result.steps.length > 0 && result.steps[result.steps.length-1].message) { // Custom message from lookup
+                 resultDisplay.innerText = result.steps[result.steps.length-1].message;
+            } else if (data.length > 0) {
+                if (result.position < data.length && data[result.position] === keyToLookup) {
+                    resultDisplay.innerText = `Key ${keyToLookup} FOUND at data index ${result.position}. (Value in data: ${data[result.position]})`;
+                } else if (result.position < data.length) {
+                    resultDisplay.innerText = `Key ${keyToLookup} NOT FOUND. The smallest key greater than or equal to ${keyToLookup} is ${data[result.position]} at data index ${result.position}. This is its lower bound.`;
+                } else { // result.position >= data.length
+                    resultDisplay.innerText = `Key ${keyToLookup} NOT FOUND and is greater than all keys in the data. Lower bound index is ${result.position} (points beyond the data).`;
+                }
+            } else { // Empty data array
+                 resultDisplay.innerText = `Lookup for key ${keyToLookup} on an empty dataset. Position returned: ${result.position}.`;
+            }
+            visualizeLookupSteps(result.steps, keyToLookup);
+        }
+
+        function visualizeLookupSteps(steps, originalLookupKey) {
+            const stepsContainer = document.getElementById('lookup-steps');
+            stepsContainer.innerHTML = '<h3>Lookup Path & Details</h3>';
+            // Clear previous highlights
+            document.querySelectorAll('.bin.highlighted').forEach(bin => bin.classList.remove('highlighted'));
+
+            for (let i = 0; i < steps.length; i++) {
+                const step = steps[i]; const stepDiv = document.createElement('div');
+                stepDiv.className = 'lookup-step';
+                if (step.isFinalStep) {
+                    stepDiv.style.backgroundColor = '#e8f5e9'; stepDiv.style.borderLeftColor = '#4caf50';
+                    let finalStepHtml = `<p><b>Final Step (Searching for Key ${originalLookupKey}):</b></p>`;
+                    if (step.message) {
+                        finalStepHtml += `<p>${step.message}</p>`;
+                    } else {
+                        finalStepHtml += `<p>Narrowed search to data indices [${step.searchRangeStart} to ${step.searchRangeEnd}] (contains ${step.terminalBinSize} items based on Hist-Tree path).</p>`;
+                        finalStepHtml += `<p>Binary Search in this segment resulted in <strong>Position ${step.finalPos}</strong> in the sorted data array.</p>`;
+                    }
+                     stepDiv.innerHTML = finalStepHtml;
+                } else {
+                    const nodeSnap = step.nodeSnapshot;
+                    const keyForNodeDisplay = Math.round(step.keyAdjustedForThisNode); // Original key relative to node start, but in global scale
+                    const binStart = Math.round(nodeSnap.effectiveMinKey + step.calculatedBinIndex * nodeSnap.binWidth);
+                    const binEnd = Math.round(nodeSnap.effectiveMinKey + (step.calculatedBinIndex + 1) * nodeSnap.binWidth -1);
+
+                    stepDiv.innerHTML = `
+                        <p><b>Step ${i + 1} (Target Key ${originalLookupKey}):</b> Examining Node at Depth ${nodeSnap.depth}</p>
+                        <p>Node covers keys from ${Math.round(nodeSnap.effectiveMinKey)} to ${Math.round(nodeSnap.effectiveMinKey + nodeSnap.conceptualRangeWidth - 1)}.</p>
+                        <p>Key ${originalLookupKey} (adjusted for this node start: ${keyForNodeDisplay}) / Bin Key Range Width (${nodeSnap.binWidth.toFixed(2)}) = ~Bin Index ${step.calculatedBinIndex}.</p>
+                        <p>Selected <strong>Bin ${step.calculatedBinIndex}</strong>: Covers keys [${binStart} to ${binEnd}], Item Count: ${nodeSnap.histogram[step.calculatedBinIndex]}.</p>
+                        <p>Position Estimate before this node's contribution: ${step.positionEstimateBeforeThisNode}. (After adding counts from prior bins in this node, estimate becomes new base for child or final search).</p>`;
+
+                    const nodeDiv = nodeElementsRegistry[step.nodeId];
+                    if (nodeDiv) {
+                        const binsInNode = nodeDiv.querySelectorAll('.bin');
+                        if (step.calculatedBinIndex < binsInNode.length) {
+                            binsInNode[step.calculatedBinIndex].classList.add('highlighted');
+                            binsInNode[step.calculatedBinIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
                         }
                     }
                 }
-            }
-            
-            // Add debug info
-            const debugInfo = document.createElement('div');
-            debugInfo.className = 'debug-info';
-            debugInfo.innerHTML = `<p><b>Tree structure:</b> Root node has ${histTree.root.histogram.length} bins</p>`;
-            container.appendChild(debugInfo);
-            
-            // Start rendering from the root
-            renderNode(histTree.root, 0, -1);
-            
-            // Add info about max depth reached
-            if (maxDepthReached >= histTree.maxDepth - 1) {
-                const depthWarning = document.createElement('div');
-                depthWarning.className = 'depth-warning';
-                depthWarning.innerHTML = `<p>Warning: Maximum tree depth (${histTree.maxDepth}) reached or nearly reached. Some branches may be cut off.</p>`;
-                container.insertBefore(depthWarning, container.firstChild);
-            }
-        }
-        
-        function performLookup() {
-            if (!histTree) {
-                alert('Please build the Hist-Tree first!');
-                return;
-            }
-            
-            const key = parseInt(document.getElementById('lookup-key').value);
-            const result = histTree.lookup(key);
-            
-            // Display lookup result
-            const resultDisplay = document.getElementById('lookup-result');
-            
-            if (result.position < data.length && data[result.position] === key) {
-                resultDisplay.innerText = `Key ${key} found at position ${result.position}`;
-            } else if (result.position < data.length) {
-                resultDisplay.innerText = `Key ${key} not found. Lower bound at position ${result.position} with value ${data[result.position]}`;
-            } else {
-                resultDisplay.innerText = `Key ${key} not found. Position ${result.position} is beyond array bounds.`;
-            }
-            
-            // Visualize lookup steps
-            visualizeLookupSteps(result.steps);
-        }
-        
-        function visualizeLookupSteps(steps) {
-            const stepsContainer = document.getElementById('lookup-steps');
-            stepsContainer.innerHTML = '<h3>Lookup Steps</h3>';
-            
-            // Reset previous highlights
-            const allBins = document.querySelectorAll('.bin');
-            allBins.forEach(bin => {
-                bin.classList.remove('highlighted');
-            });
-            
-            // Show each step
-            for (let i = 0; i < steps.length - 1; i++) {
-                const step = steps[i];
-                const stepDiv = document.createElement('div');
-                stepDiv.className = 'lookup-step';
-                
-                let runningSum = step.pos;
-                for (let j = 0; j < step.bin; j++) {
-                    runningSum += step.node.histogram[j];
-                }
-                
-                stepDiv.innerHTML = `
-                    <p><b>Step ${i + 1}:</b> Selected bin ${step.bin} with count ${step.node.histogram[step.bin]}</p>
-                    <p>Running position sum: ${step.pos}</p>
-                `;
                 stepsContainer.appendChild(stepDiv);
-                
-                // Highlight the bin in the visualization
-                const nodeDivs = document.querySelectorAll('.node');
-                if (i < nodeDivs.length) {
-                    const bins = nodeDivs[i].querySelectorAll('.bin');
-                    if (step.bin < bins.length) {
-                        bins[step.bin].classList.add('highlighted');
-                    }
-                }
-            }
-            
-            // Final step (binary search in terminal bin)
-            const finalStep = steps[steps.length - 1];
-            if (finalStep.finalPos !== undefined) {
-                const finalStepDiv = document.createElement('div');
-                finalStepDiv.className = 'lookup-step';
-                finalStepDiv.style.backgroundColor = '#e8f5e9';
-                finalStepDiv.style.borderLeftColor = '#4caf50';
-                finalStepDiv.innerHTML = `
-                    <p><b>Final Step:</b> Binary search within terminal bin (size: ${finalStep.terminalBinSize})</p>
-                    <p>Final position: ${finalStep.finalPos}</p>
-                `;
-                stepsContainer.appendChild(finalStepDiv);
             }
         }
-        
-        // Initialize with some data
+        // Initialize with some data on page load for convenience
         generateData();
+        buildHistTree();
     </script>
 </body>
-</html> 
+</html>
